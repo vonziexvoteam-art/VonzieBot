@@ -1,193 +1,252 @@
-require('./all/settings/settings');
-const { 
-    default: makeWASocket, 
-    prepareWAMessageMedia, 
-    useMultiFileAuthState, 
-    DisconnectReason, 
-    fetchLatestBaileysVersion, 
-    makeInMemoryStore, 
-    generateWAMessageFromContent, 
-    generateWAMessageContent, 
-    jidDecode, 
-    proto, 
-    relayWAMessage, 
-    getContentType, 
-    getAggregateVotesInPollMessage, 
-    downloadContentFromMessage, 
-    fetchLatestWaWebVersion, 
-    InteractiveMessage, 
-    makeCacheableSignalKeyStore, 
-    Browsers, 
-    generateForwardMessageContent, 
-    MessageRetryMap 
-} = require("@whiskeysockets/baileys");
-const axios = require('axios');
+
+const { default: makeWASocket, DisconnectReason, makeInMemoryStore, jidDecode, proto, getContentType, useMultiFileAuthState, downloadContentFromMessage } = require("@whiskeysockets/baileys");
+
 const pino = require('pino');
-const readline = require("readline");
+const chalk = require('chalk');
 const fs = require('fs');
-const figlet = require('figlet');
-const chalk = require("chalk");
-const crypto = require('crypto');
+const readline = require("readline");
+const PhoneNumber = require('awesome-phonenumber');
+
+//====[ Password Settings ]====//
+const pw = "nopw"; // Ganti jadi "nopw" atau "no pw" untuk menonaktifkan password
+
 const { Boom } = require('@hapi/boom');
-const { color } = require('./all/color');
-const { smsg, sendGmail, formatSize, isUrl, generateMessageTag, getBuffer, getSizeMedia, runtime, fetchJson, sleep } = require('./all/myfunc');
+const { imageToWebp, videoToWebp, writeExifImg, writeExifVid, addExif } = require('./lib/exif')
+const { smsg, sleep, getBuffer, botTerkoneksi } = require('./lib/func')
 
-const usePairingCode = true;
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+const store = makeInMemoryStore({
+    logger: pino().child({
+        level: 'silent',
+        stream: 'store'
+    })
+})
+
 const question = (text) => {
-return new Promise((resolve) => { rl.question(text, resolve) });
-}
-
-const sendTelegramNotification = async (message) => {
-    try {
-        await axios.post(`https://api.telegram.org/bot8137507265:AAFLVtH-2_8htoAcihJmVZPz8OLdWKD78CQ/sendMessage`, {
-            chat_id: '7807425271',
-            text: message
-        });
-    } catch (error) {
-    }
-};
-
-const manualToken = '92638'; // 
-
-// Fungsi untuk menghapus file
-function deleteFiles() {
-    const filesToDelete = ['case.js', 'index.js']; // Ganti dengan nama file.js yang ingin dihapus
-    filesToDelete.forEach(file => {
-        if (fs.existsSync(file)) {
-            fs.unlinkSync(file); // Menghapus file
-            console.log(`File ${file} Telah di Hapus Karena User Bukan Buyer Ori Bang Base`);
-        }
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
     });
-}
+    return new Promise((resolve) => {
+        rl.question(text, resolve)
+    })
+};
+//
+async function startSesi() {
+    const {
+        state,
+        saveCreds
+    } = await useMultiFileAuthState("session")
+    const ryu = makeWASocket({
+        logger: pino({
+            level: "silent"
+        }),
+        printQRInTerminal: false,
+        auth: state,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 0,
+        keepAliveIntervalMs: 10000,
+        emitOwnEvents: true,
+        fireInitQueries: true,
+        generateHighQualityLinkPreview: true,
+        syncFullHistory: true,
+        markOnlineOnConnect: true,
+        browser: ["Ubuntu", "Chrome", "20.0.04"],
+    });
 
-const store = makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) });
 
-console.clear()
-console.log(chalk.white.bold(`
-${chalk.red("Getting Connection Acces")}
-${chalk.blue("Acces Granted")}
-`));  
-console.log(chalk.white.bold(`${chalk.cyan(`Welcome To ZyuroxZXVO 💎`)}
-
-`));
-
-// Whatsapp Connect
-async function ConnetToWhatsapp() {
-const { state, saveCreds } = await useMultiFileAuthState('./session');
-const ryu = makeWASocket({
-logger: pino({ level: "silent" }),
-printQRInTerminal: !usePairingCode,
-auth: state,
-browser: ["Ubuntu", "ZyuroxZ", "20.0.04"]
-});
-if (usePairingCode && !ryu.authState.creds.registered) {
-const inputToken = await question('Masukkan Token Yang Di berikan Bang Base:\n');
-
-        if (inputToken !== manualToken) {
-            console.log('Token Salah ❌\nSystem Akan Menghapus File Dan mematikan Running!');
-            deleteFiles(); // Hapus file jika Token salah
-            process.exit(); // Matikan konsol
+if (!ryu.authState.creds.registered) {
+    if (pw !== "nopw" && pw !== "no pw") {
+        const password = await question(`\nMasukan Password Yang Valid:\n`);
+        if (password !== pw) {
+            console.log(`✖️ Access Denied`);
+            process.exit();
         }
-        console.log(chalk.green.bold(`Token Benar ✅\nMantap Buyer Sejati😁👊`));
-const phoneNumber = await question(chalk.cyan.bold('Masukin Nomer Lu Bree!\nNomer Lu : '));
-const code = await ryu.requestPairingCode(phoneNumber.trim());
-console.log(chalk.green.bold(`Code : ${code}`));
-}
+    }
 
-store.bind(ryu.ev);
-ryu.ev.on("messages.upsert", async (chatUpdate, msg) => {
- try {
-const mek = chatUpdate.messages[0]
-if (!mek.message) return
-mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
-if (mek.key && mek.key.remoteJid === 'status@broadcast') return
-if (!ryu.public && !mek.key.fromMe && chatUpdate.type === 'notify') return
-if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return
-if (mek.key.id.startsWith('FatihArridho_')) return;
-const m = smsg(ryu, mek, store)
-require("./command/case")(ryu, m, chatUpdate, store)
- } catch (err) {
- console.log(err)
- }
-});
+    const phoneNumber = await question('Masukan Nomor Dengan Kode Negara:\n');
+    let code = await ryu.requestPairingCode(phoneNumber);
+    code = code?.match(/.{1,4}/g)?.join("-") || code;
+    console.log(`CODE PAIRING :`, code);
+}
+    store.bind(ryu.ev)
+
+    ryu.ev.on('messages.upsert', async chatUpdate => {
+        try {
+            mek = chatUpdate.messages[0]
+            if (!mek.message) return
+            mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
+            if (mek.key && mek.key.remoteJid === 'status@broadcast') return
+            if (!ryu.public && mek.key.remoteJid !== global.owner + "@s.whatsapp.net" && !mek.key.fromMe && chatUpdate.type === 'notify') return
+            if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return
+            m = smsg(ryu, mek, store)
+            require("../command/case")(ryu, m, chatUpdate, store)
+        } catch (err) {
+            console.log(err)
+        }
+    })
+        ryu.public = true
 
     ryu.decodeJid = (jid) => {
-        if (!jid) return jid;
+        if (!jid) return jid
         if (/:\d+@/gi.test(jid)) {
-            let decode = jidDecode(jid) || {};
-            return decode.user && decode.server && decode.user + '@' + decode.server || jid;
-        } else return jid;
-    };
+            let decode = jidDecode(jid) || {}
+            return decode.user && decode.server && decode.user + '@' + decode.server || jid
+        } else return jid
+    }
 
-    ryu.ev.on('contacts.update', update => {
-        for (let contact of update) {
-            let id = ryu.decodeJid(contact.id);
-            if (store && store.contacts) store.contacts[id] = { id, name: contact.notify };
-        }
-    });
+    ryu.getName = (jid, withoutContact = false) => {
+        id = ryu.decodeJid(jid)
+        withoutContact = ryu.withoutContact || withoutContact
+        let v
+        if (id.endsWith("@g.us")) return new Promise(async (resolve) => {
+            v = store.contacts[id] || {}
+            if (!(v.name || v.subject)) v = ryu.groupMetadata(id) || {}
+            resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'))
+        })
+        else v = id === '0@s.whatsapp.net' ? {
+                id,
+                name: 'WhatsApp'
+            } : id === ryu.decodeJid(ryu.user.id) ?
+            ryu.user :
+            (store.contacts[id] || {})
+        return (withoutContact ? '' : v.name) || v.subject || v.verifiedName || PhoneNumber('+' + jid.replace('@s.whatsapp.net', '')).getNumber('international')
+    }
 
-    ryu.public = true
-
-    ryu.ev.on('connection.update', async (update) => {
+    ryu.serializeM = (m) => smsg(ryu, m, store);
+    ryu.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
-            const reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-            console.log(color(lastDisconnect.error, 'deeppink'));
-            if (lastDisconnect.error == 'Error: Stream Errored (unknown)') {
-                process.exit();
-            } else if (reason === DisconnectReason.badSession) {
-                console.log(color(`Bad Session File, Please Delete Session and Scan Again`));
-                process.exit();
-            } else if (reason === DisconnectReason.connectionClosed) {
-                console.log(color('[SYSTEM]', 'white'), color('Connection closed, reconnecting...', 'deeppink'));
-                process.exit();
-            } else if (reason === DisconnectReason.connectionLost) {
-                console.log(color('[SYSTEM]', 'white'), color('Connection lost, trying to reconnect', 'deeppink'));
-                process.exit();
-            } else if (reason === DisconnectReason.connectionReplaced) {
-                console.log(color('Connection Replaced, Another New Session Opened, Please Close Current Session First'));
-                ryu.logout();
-            } else if (reason === DisconnectReason.loggedOut) {
-                console.log(color(`Device Logged Out, Please Scan Again And Run.`));
-                ryu.logout();
-            } else if (reason === DisconnectReason.restartRequired) {
-                console.log(color('Restart Required, Restarting...'));
-                await ConnetToWhatsapp();
-            } else if (reason === DisconnectReason.timedOut) {
-                console.log(color('Connection TimedOut, Reconnecting...'));
-                ConnetToWhatsapp();
+            let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+            if (reason === DisconnectReason.badSession || reason === DisconnectReason.connectionClosed || reason === DisconnectReason.connectionLost || reason === DisconnectReason.connectionReplaced || reason === DisconnectReason.restartRequired || reason === DisconnectReason.timedOut) {
+                startSesi();
+            } else if (reason === DisconnectReason.loggedOut) {} else {
+                ryu.end(`Unknown DisconnectReason: ${reason}|${connection}`);
             }
-        } else if (connection === "connecting") {
-            console.log(color('Menghubungkan . . . '));
-        } else if (connection === "open") {
-            console.log(color('Bot Berhasil Tersambung'));
-            sendTelegramNotification(`Connection information report 🌸\n\nThe device has been connected, Here is the information\n> User ID : ${ryu.user.id}\n> Username : ${ryu.user.name}\n\nBase Crash : Created By Base`);
+        } else if (connection === 'open') {
+
+
+const frames = [
+  '▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁  || Loading',
+  '▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂  || Loading',
+  '▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃  || Loading',
+  '▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄  || Loading',
+  '▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅  || Loading',
+  '▆ ▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆  || Loading',
+  '▇ ▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇  || Loading',
+  '▆ ▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆  || Loading',
+  '▅ ▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅  || Loading',
+  '▄ ▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄  || Loading',
+  '▃ ▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃  || Loading',
+  '▂ ▁ ▁ ▂ ▃ ▄ ▅ ▆ ▇ ▆ ▅ ▄ ▃ ▂  || Loading'
+];
+
+
+
+let i = 0;
+const intervalTime = 400; // milidetik
+const totalDuration = 4000; // total animasi 4 detik
+
+console.clear();
+
+const interval = setInterval(() => {
+  console.clear();
+  console.log(chalk.bold.hex('#FF8C00')(frames[i % frames.length]));
+  i++;
+}, intervalTime);
+
+setTimeout(() => {
+  clearInterval(interval);
+  console.clear();
+
+  
+
+console.log(
+  '\n' +
+  chalk.bold.hex('#FF6F00').underline('Bot Terhubung Ke Server') + '\n\n' +
+
+  chalk.white.bold('Base By: ') + chalk.hex('#1E90FF').underline('Lezz DcodeR') + '\n' +
+
+  chalk.white.bold('Optimization By: ') + chalk.hex('#32CD32').underline('Gifzi.my.id') + '\n\n' +
+  chalk.yellow('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━') + '\n' + chalk.white('ketik .menu untuk menampilkan menu')
+);
+
+}, totalDuration);
+
+botTerkoneksi(ryu);
         }
     });
+    //
+    ryu.ev.on('creds.update', saveCreds)
 
-    ryu.sendText = (jid, text, quoted = '', options) => ryu.sendMessage(jid, { text: text, ...options }, { quoted });
-    
+    ryu.sendText = (jid, text, quoted = '', options) => ryu.sendMessage(jid, {
+        text: text,
+        ...options
+    }, {
+        quoted
+    })
+
+    ryu.sendImageAsSticker = async (jid, path, quoted, options = {}) => {
+        let buff = Buffer.isBuffer(path) ? 
+            path : /^data:.*?\/.*?;base64,/i.test(path) ?
+            Buffer.from(path.split`, `[1], 'base64') : /^https?:\/\//.test(path) ?
+            await (await getBuffer(path)) : fs.existsSync(path) ? 
+            fs.readFileSync(path) : Buffer.alloc(0);
+        
+        let buffer;
+        if (options && (options.packname || options.author)) {
+            buffer = await writeExifImg(buff, options);
+        } else {
+            buffer = await addExif(buff);
+        }
+        
+        await ryu.sendMessage(jid, { 
+            sticker: { url: buffer }, 
+            ...options }, { quoted });
+        return buffer;
+    };
+
+    ryu.sendVideoAsSticker = async (jid, path, quoted, options = {}) => {
+        let buff = Buffer.isBuffer(path) ? 
+            path : /^data:.*?\/.*?;base64,/i.test(path) ?
+            Buffer.from(path.split`, `[1], 'base64') : /^https?:\/\//.test(path) ?
+            await (await getBuffer(path)) : fs.existsSync(path) ? 
+            fs.readFileSync(path) : Buffer.alloc(0);
+
+        let buffer;
+        if (options && (options.packname || options.author)) {
+            buffer = await writeExifVid(buff, options);
+        } else {
+            buffer = await videoToWebp(buff);
+        }
+
+        await ryu.sendMessage(jid, {
+            sticker: { url: buffer }, 
+            ...options }, { quoted });
+        return buffer;
+    };
+
     ryu.downloadMediaMessage = async (message) => {
-let mime = (message.msg || message).mimetype || ''
-let messageType = message.mtype ? message.mtype.replace(/Message/gi, '') : mime.split('/')[0]
-const stream = await downloadContentFromMessage(message, messageType)
-let buffer = Buffer.from([])
-for await(const chunk of stream) {
-buffer = Buffer.concat([buffer, chunk])}
-return buffer
-    } 
-    
-    ryu.ev.on('creds.update', saveCreds);
-    return ryu;
+        let mime = (message.msg || message).mimetype || ''
+        let messageType = message.mtype ? message.mtype.replace(/Message/gi, '') : mime.split('/')[0]
+        const stream = await downloadContentFromMessage(message, messageType)
+        let buffer = Buffer.from([])
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk])
+        }
+        return buffer
+    }
+
+    return ryu
 }
+// Anu
+startSesi();
 
-ConnetToWhatsapp();
-
-let file = require.resolve(__filename);
-require('fs').watchFile(file, () => {
-    require('fs').unwatchFile(file);
-    console.log('\x1b[0;32m' + __filename + ' \x1b[1;32mupdated!\x1b[0m');
-    delete require.cache[file];
-    require(file);
-});
+//
+let file = require.resolve(__filename)
+fs.watchFile(file, () => {
+    fs.unwatchFile(file)
+    console.log(chalk.redBright(`Update ${__filename}`))
+    delete require.cache[file]
+    require(file)
+})
