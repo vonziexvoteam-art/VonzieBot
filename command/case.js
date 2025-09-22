@@ -1,4 +1,4 @@
-require('./all/settings/settings');
+require('../settings/settings');
 const fs = require('fs');
 const axios = require('axios');
 const didyoumean = require('didyoumean');
